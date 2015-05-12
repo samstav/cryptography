@@ -148,7 +148,7 @@ def _handle_rsa_enc_dec_error(backend, key):
 
 @utils.register_interface(AsymmetricSignatureContext)
 class _RSASignatureContext(object):
-    def __init__(self, backend, private_key, padding, algorithm):
+    def __init__(self, backend, private_key, padding, algorithm, hash_context=None):
         self._backend = backend
         self._private_key = private_key
 
@@ -199,7 +199,8 @@ class _RSASignatureContext(object):
 
         self._padding = padding
         self._algorithm = algorithm
-        self._hash_ctx = hashes.Hash(self._algorithm, self._backend)
+        self._hash_ctx = hashes.Hash(self._algorithm, self._backend,
+                                     ctx=hash_context)
 
     def update(self, data):
         self._hash_ctx.update(data)
@@ -302,34 +303,46 @@ class _RSASignatureContext(object):
     def _finalize_pss(self, evp_md):
         data_to_sign = self._hash_ctx.finalize()
         padded = self._backend._ffi.new("unsigned char[]", self._pkey_size)
-        res = self._backend._lib.RSA_padding_add_PKCS1_PSS(
-            self._private_key._rsa_cdata,
-            padded,
-            data_to_sign,
-            evp_md,
-            _get_rsa_pss_salt_length(
-                self._padding,
-                self._private_key.key_size,
-                len(data_to_sign)
-            )
-        )
-        if res != 1:
-            errors = self._backend._consume_errors()
-            assert errors[0].lib == self._backend._lib.ERR_LIB_RSA
-            assert (errors[0].reason ==
-                    self._backend._lib.RSA_R_DATA_TOO_LARGE_FOR_KEY_SIZE)
-            raise ValueError("Salt length too long for key size. Try using "
-                             "MAX_LENGTH instead.")
+
+        dts_len = len(data_to_sign)
+        dts = self._backend._ffi.new("unsigned char[]", data_to_sign)
+
+        #res = self._backend._lib.RSA_padding_add_PKCS1_PSS(
+        #    self._private_key._rsa_cdata,
+        #    padded,
+        #    data_to_sign,
+        #    evp_md,
+        #    _get_rsa_pss_salt_length(
+        #        self._padding,
+        #        self._private_key.key_size,
+        #        len(data_to_sign)
+        #    )
+        #)
+        #if res != 1:
+        #    errors = self._backend._consume_errors()
+        #    assert errors[0].lib == self._backend._lib.ERR_LIB_RSA
+        #    assert (errors[0].reason ==
+        #            self._backend._lib.RSA_R_DATA_TOO_LARGE_FOR_KEY_SIZE)
+        #    raise ValueError("Salt length too long for key size. Try using "
+        #                     "MAX_LENGTH instead.")
 
         sig_buf = self._backend._ffi.new("char[]", self._pkey_size)
         sig_len = self._backend._lib.RSA_private_encrypt(
-            self._pkey_size,
-            padded,
+            #self._pkey_size,
+            dts_len,
+            #padded,
+            dts,
             sig_buf,
             self._private_key._rsa_cdata,
-            self._backend._lib.RSA_NO_PADDING
+            #self._backend._lib.RSA_NO_PADDING
+            self._backend._lib.RSA_PKCS1_PADDING
         )
-        assert sig_len != -1
+        try:
+            assert sig_len != -1
+        except AssertionError as err:
+            print(err)
+            import pdb;pdb.set_trace()
+
         return self._backend._ffi.buffer(sig_buf)[:sig_len]
 
 
@@ -525,8 +538,14 @@ class _RSAPrivateKey(object):
 
     key_size = utils.read_only_property("_key_size")
 
-    def signer(self, padding, algorithm):
-        return _RSASignatureContext(self._backend, self, padding, algorithm)
+    def signer(self, padding, algorithm, hash_context=None):
+        return _RSASignatureContext(
+            self._backend,
+            self,
+            padding,
+            algorithm,
+            hash_context=hash_context,
+        )
 
     def decrypt(self, ciphertext, padding):
         key_size_bytes = int(math.ceil(self.key_size / 8.0))

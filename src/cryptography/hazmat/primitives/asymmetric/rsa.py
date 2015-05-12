@@ -17,7 +17,7 @@ from cryptography.hazmat.backends.interfaces import RSABackend
 @six.add_metaclass(abc.ABCMeta)
 class RSAPrivateKey(object):
     @abc.abstractmethod
-    def signer(self, padding, algorithm):
+    def signer(self, padding, algorithm, hash_context=None):
         """
         Returns an AsymmetricSignatureContext used for signing data.
         """
