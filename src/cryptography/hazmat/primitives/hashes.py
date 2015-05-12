@@ -72,11 +72,13 @@ class Hash(object):
                 _Reasons.BACKEND_MISSING_INTERFACE
             )
 
-        if not isinstance(algorithm, HashAlgorithm):
-            raise TypeError("Expected instance of hashes.HashAlgorithm.")
         self._algorithm = algorithm
-
         self._backend = backend
+
+        if algorithm is None:
+            pass
+        elif not isinstance(algorithm, HashAlgorithm):
+            raise TypeError("Expected instance of hashes.HashAlgorithm.")
 
         if ctx is None:
             self._ctx = self._backend.create_hash_ctx(self.algorithm)

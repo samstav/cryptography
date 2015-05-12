@@ -32,7 +32,12 @@ from cryptography.hazmat.backends.openssl.dsa import (
 from cryptography.hazmat.backends.openssl.ec import (
     _EllipticCurvePrivateKey, _EllipticCurvePublicKey
 )
-from cryptography.hazmat.backends.openssl.hashes import _HashContext
+from cryptography.hazmat.backends.openssl.hashes import _HashContext, _DummyHashContext
+from cryptography.hazmat.backends.openssl.encode_asn1 import (
+    _CRL_ENTRY_EXTENSION_ENCODE_HANDLERS,
+    _CRL_EXTENSION_ENCODE_HANDLERS, _EXTENSION_ENCODE_HANDLERS,
+    _encode_asn1_int_gc, _encode_asn1_str_gc, _encode_name_gc, _txt2obj_gc,
+)
 from cryptography.hazmat.backends.openssl.hmac import _HMACContext
 from cryptography.hazmat.backends.openssl.rsa import (
     _RSAPrivateKey, _RSAPublicKey
@@ -595,6 +600,8 @@ class Backend(object):
         return self.hash_supported(algorithm)
 
     def create_hash_ctx(self, algorithm):
+        if algorithm is None:
+            return _DummyHashContext()
         return _HashContext(self, algorithm)
 
     def cipher_supported(self, cipher, mode):
