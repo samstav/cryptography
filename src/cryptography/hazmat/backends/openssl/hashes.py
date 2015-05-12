@@ -4,10 +4,42 @@
 
 from __future__ import absolute_import, division, print_function
 
+import six
 
 from cryptography import utils
-from cryptography.exceptions import UnsupportedAlgorithm, _Reasons
+from cryptography.exceptions import (
+    UnsupportedAlgorithm, _Reasons, AlreadyFinalized)
 from cryptography.hazmat.primitives import hashes
+
+
+@utils.register_interface(hashes.HashContext)
+class _DummyHashContext(object):
+
+    """Just a dummy."""
+
+    algorithm = None
+
+    def __init__(self):
+        self._ctx = six.binary_type()
+
+    def copy(self):
+        if self._ctx is None:
+            raise AlreadyFinalized("Context was already finalized.")
+        return _DummyHashContext(self._ctx)
+
+    def update(self, data):
+        if self._ctx is None:
+            raise AlreadyFinalized("Context was already finalized.")
+        if not isinstance(data, six.binary_type):
+            raise TypeError("data should be type '%s'" % six.binary_type)
+        self._ctx = self._ctx + data
+
+    def finalize(self):
+        if self._ctx is None:
+            raise AlreadyFinalized("Context was already finalized.")
+        fin = self._ctx
+        self._ctx = None
+        return fin
 
 
 @utils.register_interface(hashes.HashContext)

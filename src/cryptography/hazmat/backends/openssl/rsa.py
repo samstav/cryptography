@@ -166,7 +166,9 @@ class _RSASignatureContext(object):
         self._backend.openssl_assert(self._pkey_size > 0)
 
         if isinstance(padding, PKCS1v15):
-            if self._backend._lib.Cryptography_HAS_PKEY_CTX:
+            if algorithm is None:
+                self._finalize_method = self._finalize_pkcs1_no_hash
+            elif self._backend._lib.Cryptography_HAS_PKEY_CTX:
                 self._finalize_method = self._finalize_pkey_ctx
                 self._padding_enum = self._backend._lib.RSA_PKCS1_PADDING
             else:
@@ -210,6 +212,9 @@ class _RSASignatureContext(object):
         self._hash_ctx.update(data)
 
     def finalize(self):
+        if self._algorithm is None:
+            return self._finalize_method()
+
         evp_md = self._backend._lib.EVP_get_digestbyname(
             self._algorithm.name.encode("ascii"))
         self._backend.openssl_assert(evp_md != self._backend._ffi.NULL)
@@ -306,6 +311,22 @@ class _RSASignatureContext(object):
                              "key.")
 
         return self._backend._ffi.buffer(sig_buf)[:sig_len[0]]
+
+    def _finalize_pkcs1_no_hash(self):
+        data_to_sign = self._hash_ctx.finalize()
+
+        dts = self._backend._ffi.new("unsigned char[]", data_to_sign)
+
+        sig_buf = self._backend._ffi.new("char[]", self._pkey_size)
+        sig_len = self._backend._lib.RSA_private_encrypt(
+            len(data_to_sign),
+            dts,
+            sig_buf,
+            self._private_key._rsa_cdata,
+            self._backend._lib.RSA_PKCS1_PADDING
+        )
+        assert sig_len != -1
+        return self._backend._ffi.buffer(sig_buf)[:sig_len]
 
     def _finalize_pss(self, evp_md):
         data_to_sign = self._hash_ctx.finalize()
